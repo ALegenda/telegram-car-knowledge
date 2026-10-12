@@ -1,0 +1,8 @@
+# Optional local MCP. Replace C:\cars\telegram-car-knowledge with your folder.
+# AGENTS.md uses the CLI and does not require MCP registration.
+[mcp_servers.telegram_car_knowledge]
+command = 'C:\cars\telegram-car-knowledge\.venv\Scripts\python.exe'
+args = ["-m", "tg_knowledge.cli", "serve"]
+cwd = 'C:\cars\telegram-car-knowledge'
+startup_timeout_sec = 120
+tool_timeout_sec = 120

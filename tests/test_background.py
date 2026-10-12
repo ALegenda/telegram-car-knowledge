@@ -93,7 +93,7 @@ def test_background_retries_processing_errors_before_reporting_complete(tmp_path
         archive.set("media_policy", "source")
     calls = []
 
-    def popen(command):
+    def popen(command, **kwargs):
         calls.append(command)
         with Archive(tmp_path) as archive:
             archive.set("media_processing", {"errors": 1 if len(calls) == 1 else 0})

@@ -9,7 +9,7 @@ from pathlib import Path
 from dotenv import load_dotenv, set_key
 
 from .config import DEFAULT_CHAT, DEFAULT_DATA, client_config, data_dir, load_config
-from .runtime import acquire_lock
+from .runtime import acquire_lock, install_console_interrupt, stop_child
 
 
 def prepare_environment():
@@ -42,8 +42,13 @@ def is_ready(root: Path) -> bool:
     if not report.is_file():
         return False
     knowledge = json.loads(report.read_text(encoding="utf-8"))
+    job_file = root / "job.json"
+    if not job_file.is_file():
+        return False
+    job = json.loads(job_file.read_text(encoding="utf-8"))
     return (
-        status["history_complete"]
+        job.get("status") == "complete"
+        and status["history_complete"]
         and status["media_selection"]["complete"]
         and (status.get("media_processing") or {}).get("status") == "complete"
         and knowledge.get("history_complete") is True
@@ -56,6 +61,7 @@ def is_ready(root: Path) -> bool:
 
 def main():
     load_config()
+    install_console_interrupt()
     prepare_environment()
     # A second launcher must not open the same Telegram session or prompt for secrets.
     root = data_dir()
@@ -97,7 +103,10 @@ def main():
         print("\nНачинаю выгрузку. Оставьте окно открытым и отключите сон компьютера.")
         print("Прогресс: Status.cmd. Подробный журнал: " + str(root / "pipeline.log"))
         # Remain in the console: Ctrl+C stops safely; launching again resumes checkpoints.
-        code = subprocess.call(
+        options = {}
+        if os.name == "nt":
+            options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+        child = subprocess.Popen(
             [
                 sys.executable,
                 "-u",
@@ -108,8 +117,14 @@ def main():
                 "--process-existing",
                 "--prune-unused",
                 "--log",
-            ]
+            ],
+            **options,
         )
+        try:
+            code = child.wait()
+        except KeyboardInterrupt:
+            stop_child(child, timeout=45)
+            raise
         if code:
             raise SystemExit(code)
     finally:

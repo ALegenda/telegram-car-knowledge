@@ -6,11 +6,10 @@ import getpass
 import json
 import os
 import sys
-import signal
 from pathlib import Path
 
 from .config import DEFAULT_CHAT, data_dir, load_config
-from .runtime import acquire_lock, process_running
+from .runtime import acquire_lock, install_console_interrupt, process_running
 from .store import Archive, json_text
 
 
@@ -111,12 +110,7 @@ def configure():
 
 def main():
     load_config()
-    if hasattr(signal, "SIGBREAK"):
-
-        def interrupt(signum, frame):
-            raise KeyboardInterrupt
-
-        signal.signal(signal.SIGBREAK, interrupt)
+    install_console_interrupt()
     args = parser().parse_args()
     root = data_dir(args.data)
     export_lock = None
@@ -172,7 +166,11 @@ def main():
                         raise ValueError("Удаление требует --process-existing.")
 
                     if not args.skip_history or media_policy == "none":
-                        print(json_text(build(root, args.semantic)))
+                        # Make text available early; compute expensive vectors once, at the end.
+                        initial_semantic = (
+                            args.semantic and media_policy == "none" and not args.process_existing
+                        )
+                        print(json_text(build(root, initial_semantic)))
                     if media_policy != "none":
                         asyncio.run(
                             export_chat(

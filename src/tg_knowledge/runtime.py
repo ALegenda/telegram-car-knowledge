@@ -1,6 +1,9 @@
 """OS-neutral locks and read-only process checks (including Windows)."""
 
 from pathlib import Path
+import os
+import signal
+import subprocess
 
 import psutil
 from filelock import FileLock, Timeout
@@ -26,3 +29,23 @@ def process_running(pid: int, created_at: float | None = None) -> bool:
         return process.is_running() and process.status() != psutil.STATUS_ZOMBIE
     except (psutil.NoSuchProcess, psutil.AccessDenied):
         return False
+
+
+def install_console_interrupt():
+    if hasattr(signal, "SIGBREAK"):
+
+        def interrupt(signum, frame):
+            raise KeyboardInterrupt
+
+        signal.signal(signal.SIGBREAK, interrupt)
+
+
+def stop_child(child: subprocess.Popen, timeout: float = 30):
+    if child.poll() is not None:
+        return
+    child.send_signal(signal.CTRL_BREAK_EVENT if os.name == "nt" else signal.SIGINT)
+    try:
+        child.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        child.terminate()
+        child.wait()

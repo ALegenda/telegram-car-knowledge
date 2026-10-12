@@ -9,13 +9,14 @@ import time
 from datetime import datetime, timezone
 
 from .config import DEFAULT_CHAT, data_dir, load_config
-from .runtime import acquire_lock
+from .runtime import acquire_lock, install_console_interrupt, stop_child
 from .knowledge import atomic_text
 from .store import json_text
 
 
 def main():
     load_config()
+    install_console_interrupt()
     parser = argparse.ArgumentParser(description="Фоновая полная выгрузка с повтором после сбоя")
     parser.add_argument("--data")
     parser.add_argument("--chat", default=os.getenv("TELEGRAM_CHAT", DEFAULT_CHAT))
@@ -129,13 +130,8 @@ def main():
                     time.sleep(30)
             raise SystemExit(1)
         except KeyboardInterrupt:
-            if child is not None and child.poll() is None:
-                child.send_signal(signal.CTRL_BREAK_EVENT if os.name == "nt" else signal.SIGINT)
-                try:
-                    child.wait(timeout=20)
-                except subprocess.TimeoutExpired:
-                    child.terminate()
-                    child.wait()
+            if child is not None:
+                stop_child(child)
             status("stopped")
             raise SystemExit(130) from None
 

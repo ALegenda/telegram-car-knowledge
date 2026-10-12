@@ -83,3 +83,27 @@ def test_failed_document_parser_or_limit_never_counts_as_unused(tmp_path):
     with pytest.raises(ValueError, match="incomplete"):
         reprocess.source_document_text(path, ".txt")
     assert path.exists()
+
+
+def test_pipeline_computes_semantic_index_only_after_source_documents(tmp_path, monkeypatch):
+    from tg_knowledge import knowledge, telegram
+
+    async def fake_export(*args, **kwargs):
+        pass
+
+    builds = []
+    monkeypatch.setattr(telegram, "export_chat", fake_export)
+    monkeypatch.setattr(knowledge, "build", lambda root, semantic: builds.append(semantic))
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "tg-knowledge",
+            "--data",
+            str(tmp_path),
+            "pipeline",
+            "--semantic",
+        ],
+    )
+    cli.main()
+    assert builds == [False, True]

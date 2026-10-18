@@ -31,7 +31,7 @@ def main():
     revision = os.environ["GITHUB_SHA"]
     branch = "bot-session/" + run_id
     mode = Path("deploy/remote-session.request").read_text().splitlines()[0].strip()
-    if mode not in {"inspect", "deploy"}:
+    if mode not in {"inspect", "prepare", "deploy"}:
         raise ValueError("Unsupported session mode")
 
     def api(method, path, body=None, missing=False):
@@ -88,8 +88,18 @@ def main():
             raise ValueError("Session binding does not match")
         if not re.fullmatch(r"[0-9a-f]{40}", revision):
             raise ValueError("Invalid release")
+        expected_host_key = payload.get("host_key")
+        if mode != "inspect" and not expected_host_key:
+            raise ValueError("Server host key from inspection is required")
+
+        class PinnedHostKey(paramiko.MissingHostKeyPolicy):
+            def missing_host_key(self, client, hostname, key):
+                actual = base64.b64encode(hashlib.sha256(key.asbytes()).digest()).decode().rstrip("=")
+                if expected_host_key and actual != expected_host_key.removeprefix("SHA256:"):
+                    raise paramiko.SSHException("Server host key mismatch")
+
         client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client.set_missing_host_key_policy(PinnedHostKey())
         client.connect(
             payload["host"], port=payload.get("port", 22), username=payload["user"],
             password=payload["password"], timeout=15, banner_timeout=15, auth_timeout=15,
@@ -125,12 +135,18 @@ print(json.dumps({
 print(subprocess.check_output(['systemctl','list-units','--type=service','--state=running','--no-pager','--plain'],text=True))
 PY""")
         else:
-            config = payload["config"]
+            config = payload.get("config", "")
             from dotenv import dotenv_values
             import io
 
             values = dotenv_values(stream=io.StringIO(config))
-            if not values.get("OPENAI_API_KEY") or not values.get("TELEGRAM_BOT_TOKEN"):
+            if mode == "deploy" and not values.get("TELEGRAM_BOT_TOKEN"):
+                with client.open_sftp() as sftp:
+                    with sftp.open("/etc/tg-knowledge-bot/telegram.env", "r") as source:
+                        token_config = source.read().decode()
+                config += "\n" + token_config
+                values = dotenv_values(stream=io.StringIO(config))
+            if mode == "deploy" and (not values.get("OPENAI_API_KEY") or not values.get("TELEGRAM_BOT_TOKEN")):
                 raise ValueError("Missing bot credentials; server was not modified")
             command("umask 077; mkdir -p /opt/tg-knowledge-bot/uploads")
             with tempfile.TemporaryDirectory() as temporary:
@@ -139,11 +155,12 @@ PY""")
                 remote = "/opt/tg-knowledge-bot/uploads/" + revision
                 with client.open_sftp() as sftp:
                     sftp.put(archive, remote + ".tar.gz")
-                    with sftp.open(remote + ".env", "w") as output:
-                        output.write(config)
-                    sftp.chmod(remote + ".env", 0o600)
+                    if mode == "deploy":
+                        with sftp.open(remote + ".env", "w") as output:
+                            output.write(config)
+                        sftp.chmod(remote + ".env", 0o600)
                     sftp.put("scripts/install-bot.sh", remote + ".install.sh")
-                command("bash " + remote + ".install.sh " + revision)
+                command("bash " + remote + ".install.sh " + revision + (" prepare" if mode == "prepare" else ""))
                 command("rm -f " + remote + ".install.sh")
     finally:
         if client:

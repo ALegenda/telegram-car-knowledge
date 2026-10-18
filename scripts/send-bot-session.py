@@ -25,7 +25,8 @@ def main():
     parser.add_argument("--host", required=True)
     parser.add_argument("--port", type=int, default=22)
     parser.add_argument("--user", default="root")
-    parser.add_argument("--mode", choices=["inspect", "deploy"], required=True)
+    parser.add_argument("--mode", choices=["inspect", "prepare", "deploy"], required=True)
+    parser.add_argument("--host-key", help="SHA256 host key from the initial inspection")
     parser.add_argument("--env", type=Path)
     args = parser.parse_args()
 
@@ -49,6 +50,7 @@ def main():
     payload = {
         "host": args.host, "port": args.port, "user": args.user,
         "mode": args.mode, "run_id": args.run_id, "revision": expected,
+        "host_key": args.host_key,
     }
     if args.mode == "deploy":
         if not args.env:

@@ -2,7 +2,9 @@
 # Invoked over SSH by deploy-bot.sh; all paths are for this separate service only.
 set -euo pipefail
 release_id=${1:?release SHA required}
+mode=${2:-activate}
 [[ "$release_id" =~ ^[0-9a-f]{40}$ ]] || exit 2
+[[ "$mode" == prepare || "$mode" == activate ]] || exit 2
 [[ $(id -u) == 0 ]] || { echo 'Installer requires root.' >&2; exit 2; }
 base=/opt/tg-knowledge-bot
 release="$base/releases/$release_id"
@@ -27,9 +29,18 @@ if [[ ! -d "$release" ]]; then
     tar -xzf "$archive" -C "$release"
     chmod -R a+rX "$release"
 fi
-python3 -m venv "$release/.venv"
+if ! python3 -m venv "$release/.venv"; then
+    apt-get update -qq
+    DEBIAN_FRONTEND=noninteractive apt-get install -y python3-venv
+    python3 -m venv "$release/.venv"
+fi
 "$release/.venv/bin/python" -m pip --disable-pip-version-check install --require-hashes -r "$release/deploy/requirements-bot.txt" >/dev/null
 "$release/.venv/bin/python" -m pip --disable-pip-version-check install --no-deps "$release" >/dev/null
+install -m 0700 "$release/scripts/set-bot-token.py" "$base/set-bot-token.py"
+if [[ "$mode" == prepare ]]; then
+    echo "Bot release prepared: $release_id; service is not started."
+    exit 0
+fi
 
 # Validate credentials in the uploaded env without printing their contents.
 "$release/.venv/bin/python" - "$incoming" <<'PY'

@@ -24,10 +24,12 @@ media = [
     "faster-whisper>=1.2,<2",
     "imageio-ffmpeg>=0.6,<1",
 ]
+bot = ["httpx>=0.28,<1", "numpy>=1.26,<3"]
 
 [project.scripts]
 tg-knowledge = "tg_knowledge.cli:main"
 tg-knowledge-setup = "tg_knowledge.setup:main"
+tg-knowledge-bot = "tg_knowledge.bot.__main__:main"
 
 [build-system]
 requires = ["hatchling"]

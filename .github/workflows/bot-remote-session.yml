@@ -1,0 +1,27 @@
+name: Bot remote session
+on:
+  push:
+    branches: [codex/telegram-rag-bot]
+    paths:
+      - .github/workflows/bot-remote-session.yml
+      - deploy/remote-session.request
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: bot-remote-session
+  cancel-in-progress: false
+jobs:
+  remote-session:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install SSH session dependencies
+        run: python -m pip --disable-pip-version-check install 'paramiko>=3.5,<5' 'cryptography>=45,<48' 'python-dotenv>=1,<2' > /dev/null
+      - name: Wait for sealed payload and perform authorized operation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/remote-bot-session.py

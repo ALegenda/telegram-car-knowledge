@@ -1,0 +1,29 @@
+name: Bot server connectivity
+on:
+  push:
+    branches: [codex/telegram-rag-bot]
+    paths: [.github/workflows/bot-server-access.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ssh-connectivity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    env:
+      SSH_HOST: 89.126.194.117
+    steps:
+      - name: Check SSH without credentials
+        run: |
+          python - <<'PY'
+          import os, socket
+          host = os.environ['SSH_HOST']
+          if not host:
+              raise SystemExit('TG_KNOWLEDGE_SSH_HOST is not configured')
+          with socket.create_connection((host, 22), timeout=10) as connection:
+              connection.settimeout(5)
+              banner = connection.recv(256).decode(errors='replace').strip()
+          if not banner.startswith('SSH-'):
+              raise SystemExit('The server did not return an SSH banner')
+          print('SSH is reachable from GitHub Actions:', banner)
+          PY

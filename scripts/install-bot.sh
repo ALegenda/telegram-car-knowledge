@@ -47,7 +47,7 @@ fi
 import sys
 from dotenv import dotenv_values
 values = dotenv_values(sys.argv[1])
-for name in ('OPENAI_API_KEY', 'TELEGRAM_BOT_TOKEN'):
+for name in ('TELEGRAM_BOT_TOKEN',):
     if not values.get(name):
         raise SystemExit(f'Missing {name}; existing service has not been changed.')
 PY

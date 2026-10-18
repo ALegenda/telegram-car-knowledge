@@ -146,7 +146,7 @@ PY""")
                         token_config = source.read().decode()
                 config += "\n" + token_config
                 values = dotenv_values(stream=io.StringIO(config))
-            if mode == "deploy" and (not values.get("OPENAI_API_KEY") or not values.get("TELEGRAM_BOT_TOKEN")):
+            if mode == "deploy" and not values.get("TELEGRAM_BOT_TOKEN"):
                 raise ValueError("Missing bot credentials; server was not modified")
             command("umask 077; mkdir -p /opt/tg-knowledge-bot/uploads")
             with tempfile.TemporaryDirectory() as temporary:

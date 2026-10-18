@@ -306,3 +306,23 @@ def test_local_status_connection_is_readonly(store, tmp_path):
             reader.set("test", "value")
     finally:
         reader.close()
+
+
+def test_bot_returns_local_sources_without_openai_key(store, tmp_path):
+    register(store)
+    save(store, CHAT, 1, "Аккумулятор 12V заряжается отдельно")
+    svc, telegram, ai = service(store, tmp_path)
+    svc.ai = None
+    assert "Генерация ответов пока не подключена" in svc.help
+    assert "отправляются в OpenAI" not in svc.help
+    asyncio.run(svc.handle({"update_id": 20, "message": message("/ask зарядка аккумулятора")}))
+    text = telegram.replies[-1][1]
+    assert "Аккумулятор 12V" in text
+    assert "https://t.me/c/123456/1" in text
+    assert not ai.sources
+
+
+def test_settings_accept_bot_token_without_openai_key(tmp_path, monkeypatch):
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    assert Settings.from_env().openai_key == ""

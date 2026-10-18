@@ -24,8 +24,8 @@ class Settings:
     def from_env(cls, *, credentials: bool = True) -> Settings:
         token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
         key = os.getenv("OPENAI_API_KEY", "").strip()
-        if credentials and (not token or not key):
-            raise ValueError("Нужны TELEGRAM_BOT_TOKEN и OPENAI_API_KEY.")
+        if credentials and not token:
+            raise ValueError("Нужен TELEGRAM_BOT_TOKEN.")
         dimensions = int(os.getenv("BOT_EMBEDDING_DIMENSIONS", "512"))
         if not 64 <= dimensions <= 3072:
             raise ValueError("BOT_EMBEDDING_DIMENSIONS вне диапазона 64–3072.")

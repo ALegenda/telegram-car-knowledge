@@ -66,6 +66,16 @@ class Service:
         self.stop = asyncio.Event()
         self.read_all = False
 
+    @property
+    def help(self):
+        if self.ai is not None:
+            return HELP
+        return HELP.replace(
+            "Тексты для поиска и фрагменты для ответа отправляются в OpenAI API. ",
+            "Сейчас включён поиск по словам: в ответе будут найденные фрагменты и ссылки. "
+            "Поиск выполняется на этом сервере. Генерация ответов пока не подключена. ",
+        )
+
     async def reply(self, message: dict, text: str):
         result = await self.telegram.reply(message, text)
         if isinstance(result, dict) and result.get("message_id"):
@@ -139,7 +149,7 @@ class Service:
         command, question = addressed(message, self.settings.username, self.bot_id)
         if chat["type"] == "private":
             if command in {"start", "help", "ask", "kb_status"}:
-                await self.reply(message, HELP)
+                await self.reply(message, self.help)
             return
         if chat["type"] not in {"group", "supergroup", "channel"}:
             return
@@ -157,7 +167,7 @@ class Service:
                 return
             enabled = command == "kb_on"
             self.store.enable(chat["id"], enabled)
-            text = HELP if enabled else "Сбор сообщений и ответы в этом чате остановлены."
+            text = self.help if enabled else "Сбор сообщений и ответы в этом чате остановлены."
             if enabled and chat["type"] != "channel" and not self.read_all:
                 text += (
                     "\n\nЧтобы видеть обычные сообщения, дайте мне права администратора "
@@ -167,7 +177,7 @@ class Service:
             await self.reply(message, text)
             return
         if command in {"start", "help"}:
-            await self.reply(message, HELP)
+            await self.reply(message, self.help)
             return
         if command == "kb_status":
             status = self.store.stats(chat["id"])
@@ -177,10 +187,14 @@ class Service:
                 "needs_ocr", "no_text", "extraction_timeout", "extraction_failed", "partial_text_limit",
                 "pdf_over_300_pages",
             } or name.startswith("extraction_error:"))
+            mode = (
+                f"Ожидают смыслового поиска: {pending} фрагментов.\n"
+                if self.ai is not None else
+                "Режим: поиск по словам, ответ найденными фрагментами. Генерация пока не подключена.\n"
+            )
             await self.reply(message, (
                 f"Чат {chat['id']}: сбор {state}.\n"
-                f"Сохранено сообщений: {status['messages']}. "
-                f"Ожидают смыслового поиска: {pending} фрагментов.\n"
+                f"Сохранено сообщений: {status['messages']}.\n{mode}"
                 f"Документов без полного извлечения текста: {warnings}.\n"
                 "Это доступная боту история; полную старую переписку Bot API не передаёт. "
                 "Удаления сообщений Telegram тоже не передаёт: сохранённые копии остаются."
@@ -228,7 +242,7 @@ class Service:
         if self.store.get(retry_key) == "done":
             return
         try:
-            vector = (await self.ai.embed([question]))[0]
+            vector = (await self.ai.embed([question]))[0] if self.ai is not None else []
             hits = self.store.search(chat_id, question, vector, self.settings.vector_model, limit=4)
             if not hits:
                 await self.reply(message, "В сохранённых сообщениях этого чата ответ не нашёл. Попробуйте уточнить вопрос.")
@@ -246,7 +260,13 @@ class Service:
                     "number": number, "date": hit["date"], "locator": hit["locator"],
                     "text": hit["text"],
                 })
-            answer = await self.ai.answer(question, sources)
+            if self.ai is not None:
+                answer = await self.ai.answer(question, sources)
+            else:
+                answer = "Найденные фрагменты из сохранённых сообщений:\n\n" + "\n\n".join(
+                    f"[{number}] " + hit["text"][:260].strip() + ("…" if len(hit["text"]) > 260 else "")
+                    for number, hit in enumerate(hits, 1)
+                )
         except APIError as exc:
             LOG.warning("Answer API unavailable: %s status=%s", exc.operation, exc.status)
             await self.reply(message, "Сервис ответов временно недоступен. Сообщения сохраняются; попробуйте позднее.")
@@ -306,6 +326,9 @@ class Service:
                 self.store.finish(row["id"])
 
     async def embeddings(self):
+        if self.ai is None:
+            await self.stop.wait()
+            return
         while not self.stop.is_set():
             rows = self.store.pending_vectors(self.settings.vector_model)
             if not rows:
@@ -347,7 +370,8 @@ async def serve(settings: Settings):
     store = Store(settings.root)
     try:
         async with httpx.AsyncClient(follow_redirects=False) as client:
-            service = Service(settings, store, Telegram(settings.telegram_token, client), OpenAI(settings, client))
+            ai = OpenAI(settings, client) if settings.openai_key else None
+            service = Service(settings, store, Telegram(settings.telegram_token, client), ai)
             loop = asyncio.get_running_loop()
             for signum in (signal.SIGINT, signal.SIGTERM):
                 try:

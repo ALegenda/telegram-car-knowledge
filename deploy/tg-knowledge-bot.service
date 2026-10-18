@@ -1,0 +1,28 @@
+[Unit]
+Description=Telegram chat knowledge bot
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=120
+StartLimitBurst=6
+
+[Service]
+Type=simple
+User=tg-knowledge-bot
+Group=tg-knowledge-bot
+WorkingDirectory=/opt/tg-knowledge-bot/current
+Environment=PYTHONUNBUFFERED=1
+Environment=BOT_DATA_DIR=/var/lib/tg-knowledge-bot
+ExecStart=/opt/tg-knowledge-bot/current/.venv/bin/python -m tg_knowledge.bot --env /etc/tg-knowledge-bot/bot.env run
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=20
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/tg-knowledge-bot
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

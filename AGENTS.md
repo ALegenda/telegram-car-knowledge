@@ -63,3 +63,15 @@ On macOS/Linux use `.venv/bin/python -m tg_knowledge.cli` instead.
 Implementation is in `src/tg_knowledge`. After retrieval/resumability changes run
 `.venv/Scripts/python.exe -m pytest -q` and `.venv/Scripts/python.exe -m ruff check src tests`
 on Windows (POSIX: `.venv/bin/python`).
+
+## Separate server bot
+
+`src/tg_knowledge/bot` is an opt-in Bot API service. Read `docs/TELEGRAM-BOT.md`
+for server work. Use `.env.bot` and `BOT_DATA_DIR`; never reuse the local exporter's
+`.env`, session or data directory. The owner's explicit request to run a bot authorizes
+its replies to questions and setup commands; manual unrelated Telegram messages remain
+out of scope. Preserve chat isolation, source links, durable inbox and original documents.
+Run `uv sync --frozen --python 3.12 --extra dev --extra bot`, pytest and ruff after changes.
+After dependency changes regenerate `deploy/requirements-bot.txt` with
+`uv export --frozen --extra bot --no-dev --no-emit-project --output-file deploy/requirements-bot.txt`.
+Deploy only the separate `tg-knowledge-bot` service; do not replace existing services.

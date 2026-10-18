@@ -18,7 +18,7 @@ jobs:
         with:
           enable-cache: true
       - name: Install locked dependencies
-        run: uv sync --frozen --python 3.12 --extra dev --extra media --extra semantic --extra mcp
+        run: uv sync --frozen --python 3.12 --extra dev --extra media --extra semantic --extra mcp --extra bot
       - name: Tests
         run: uv run --no-sync pytest -q
       - name: Lint
